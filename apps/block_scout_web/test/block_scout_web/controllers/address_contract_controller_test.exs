@@ -4,8 +4,16 @@ defmodule BlockScoutWeb.AddressContractControllerTest do
   import BlockScoutWeb.Routers.WebRouter.Helpers, only: [address_contract_path: 3]
 
   alias Explorer.Chain.{Address, Hash}
-  alias Explorer.ExchangeRates.Token
+  alias Explorer.Market.Token
   alias Explorer.{Factory, TestHelper}
+
+  setup do
+    Application.put_env(:tesla, :adapter, Tesla.Adapter.Mint)
+
+    on_exit(fn ->
+      Application.put_env(:tesla, :adapter, Explorer.Mock.TeslaAdapter)
+    end)
+  end
 
   describe "GET index/3" do
     test "returns not found for nonexistent address", %{conn: conn} do

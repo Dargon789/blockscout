@@ -2,7 +2,7 @@ defmodule BlockScoutWeb.API.V2.VerificationControllerTest do
   use BlockScoutWeb.ConnCase
   use BlockScoutWeb.ChannelCase, async: false
 
-  alias BlockScoutWeb.UserSocketV2
+  alias BlockScoutWeb.V2.UserSocket
   alias Explorer.Chain.Address
   alias Explorer.TestHelper
   alias Tesla.Multipart
@@ -13,9 +13,11 @@ defmodule BlockScoutWeb.API.V2.VerificationControllerTest do
   setup do
     configuration = Application.get_env(:explorer, Explorer.SmartContract.RustVerifierInterfaceBehaviour)
     Application.put_env(:explorer, Explorer.SmartContract.RustVerifierInterfaceBehaviour, enabled: false)
+    Application.put_env(:tesla, :adapter, Tesla.Adapter.Mint)
 
     on_exit(fn ->
       Application.put_env(:explorer, Explorer.SmartContract.RustVerifierInterfaceBehaviour, configuration)
+      Application.put_env(:tesla, :adapter, Explorer.Mock.TeslaAdapter)
     end)
   end
 
@@ -74,7 +76,7 @@ defmodule BlockScoutWeb.API.V2.VerificationControllerTest do
         topic = "addresses:#{contract_address.hash}"
 
         {:ok, _reply, _socket} =
-          BlockScoutWeb.UserSocketV2
+          UserSocket
           |> socket("no_id", %{})
           |> subscribe_and_join(topic)
 
@@ -117,7 +119,7 @@ defmodule BlockScoutWeb.API.V2.VerificationControllerTest do
         topic = "addresses:#{contract_address.hash}"
 
         {:ok, _reply, _socket} =
-          BlockScoutWeb.UserSocketV2
+          UserSocket
           |> socket("no_id", %{})
           |> subscribe_and_join(topic)
 
@@ -162,7 +164,7 @@ defmodule BlockScoutWeb.API.V2.VerificationControllerTest do
         topic = "addresses:#{String.downcase(address)}"
 
         {:ok, _reply, _socket} =
-          UserSocketV2
+          UserSocket
           |> socket("no_id", %{})
           |> subscribe_and_join(topic)
 
@@ -250,7 +252,7 @@ defmodule BlockScoutWeb.API.V2.VerificationControllerTest do
         topic = "addresses:#{contract_address.hash}"
 
         {:ok, _reply, _socket} =
-          BlockScoutWeb.UserSocketV2
+          UserSocket
           |> socket("no_id", %{})
           |> subscribe_and_join(topic)
 
@@ -291,6 +293,8 @@ defmodule BlockScoutWeb.API.V2.VerificationControllerTest do
           eth_bytecode_db?: true
         )
 
+        Application.put_env(:tesla, :adapter, Tesla.Adapter.Mint)
+
         Bypass.expect_once(bypass, "POST", "/api/v2//verifier/vyper/sources%3Averify-multi-part", fn conn ->
           Conn.resp(conn, 200, sc_verifier_response)
         end)
@@ -313,7 +317,7 @@ defmodule BlockScoutWeb.API.V2.VerificationControllerTest do
         topic = "addresses:#{contract_address.hash}"
 
         {:ok, _reply, _socket} =
-          BlockScoutWeb.UserSocketV2
+          UserSocket
           |> socket("no_id", %{})
           |> subscribe_and_join(topic)
 
@@ -344,6 +348,7 @@ defmodule BlockScoutWeb.API.V2.VerificationControllerTest do
         assert response["is_blueprint"] == true
 
         Application.put_env(:explorer, Explorer.SmartContract.RustVerifierInterfaceBehaviour, old_env)
+        Application.put_env(:tesla, :adapter, Explorer.Mock.TeslaAdapter)
         Bypass.down(bypass)
       end
     end
@@ -398,7 +403,7 @@ defmodule BlockScoutWeb.API.V2.VerificationControllerTest do
       topic = "addresses:#{contract_address.hash}"
 
       {:ok, _reply, _socket} =
-        BlockScoutWeb.UserSocketV2
+        UserSocket
         |> socket("no_id", %{})
         |> subscribe_and_join(topic)
 

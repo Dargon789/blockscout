@@ -4,9 +4,6 @@ import Config
 |> Path.join()
 |> Code.eval_file()
 
-hackney_opts = ConfigHelper.hackney_options()
-timeout = ConfigHelper.timeout(1)
-
 config :indexer,
   block_interval: ConfigHelper.parse_time_env_var("INDEXER_CATCHUP_BLOCK_INTERVAL", "0s"),
   json_rpc_named_arguments: [
@@ -16,15 +13,15 @@ config :indexer,
         else: EthereumJSONRPC.IPC
       ),
     transport_options: [
-      http: EthereumJSONRPC.HTTP.HTTPoison,
-      urls: ConfigHelper.parse_urls_list(:http, "http://localhost:7545"),
-      eth_call_urls: ConfigHelper.parse_urls_list(:eth_call, "http://localhost:7545"),
+      http: EthereumJSONRPC.HTTP.Tesla,
+      urls: ConfigHelper.parse_urls_list(:http),
+      eth_call_urls: ConfigHelper.parse_urls_list(:eth_call),
       fallback_urls: ConfigHelper.parse_urls_list(:fallback_http),
       fallback_eth_call_urls: ConfigHelper.parse_urls_list(:fallback_eth_call),
       method_to_url: [
         eth_call: :eth_call
       ],
-      http_options: [recv_timeout: timeout, timeout: timeout, hackney: hackney_opts]
+      http_options: ConfigHelper.http_options(1)
     ],
     variant: EthereumJSONRPC.Anvil
   ],

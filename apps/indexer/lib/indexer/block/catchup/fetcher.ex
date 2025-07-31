@@ -17,6 +17,7 @@ defmodule Indexer.Block.Catchup.Fetcher do
       async_import_filecoin_addresses_info: 2,
       async_import_internal_transactions: 2,
       async_import_replaced_transactions: 2,
+      async_import_signed_authorizations_statuses: 2,
       async_import_token_balances: 2,
       async_import_token_instances: 1,
       async_import_tokens: 2,
@@ -31,6 +32,7 @@ defmodule Indexer.Block.Catchup.Fetcher do
   alias Explorer.Utility.{MassiveBlock, MissingRangesManipulator}
   alias Indexer.{Block, Tracer}
   alias Indexer.Block.Catchup.TaskSupervisor
+  alias Indexer.Fetcher.OnDemand.ContractCreator, as: ContractCreatorOnDemand
   alias Indexer.Prometheus
 
   @behaviour Block.Fetcher
@@ -121,6 +123,8 @@ defmodule Indexer.Block.Catchup.Fetcher do
         Map.put(async_import_remaining_block_data_options, :block_rewards, %{errors: block_reward_errors})
       )
 
+      ContractCreatorOnDemand.async_update_cache_of_contract_creator_on_demand(imported)
+
       ok
     end
   end
@@ -143,6 +147,7 @@ defmodule Indexer.Block.Catchup.Fetcher do
     async_import_blobs(imported, realtime?)
     async_import_celo_epoch_block_operations(imported, realtime?)
     async_import_filecoin_addresses_info(imported, realtime?)
+    async_import_signed_authorizations_statuses(imported, realtime?)
   end
 
   defp stream_fetch_and_import(state, ranges) do
@@ -154,7 +159,7 @@ defmodule Indexer.Block.Catchup.Fetcher do
       timeout: :infinity,
       shutdown: Application.get_env(:indexer, :graceful_shutdown_period)
     )
-    |> Stream.run()
+    |> handle_fetch_and_import_results()
   end
 
   # Run at state.blocks_concurrency max_concurrency when called by `stream_import/1`
@@ -175,11 +180,10 @@ defmodule Indexer.Block.Catchup.Fetcher do
     Prometheus.Instrumenter.block_full_process(fetch_duration, __MODULE__)
 
     case result do
-      {:ok, %{inserted: inserted, errors: errors}} ->
+      {:ok, %{errors: errors}} ->
         valid_errors = handle_null_rounds(errors)
-        clear_missing_ranges(range, valid_errors)
 
-        {:ok, inserted: inserted}
+        {:ok, %{range: range, errors: valid_errors}}
 
       {:error, {:import = step, [%Changeset{} | _] = changesets}} = error ->
         Prometheus.Instrumenter.import_errors()
@@ -219,6 +223,20 @@ defmodule Indexer.Block.Catchup.Fetcher do
       if timeout_exception?(exception), do: add_range_to_massive_blocks(range)
       Logger.error(fn -> [Exception.format(:error, exception, __STACKTRACE__), ?\n, ?\n, "Retrying."] end)
       {:error, exception}
+  end
+
+  defp handle_fetch_and_import_results(results) do
+    results
+    |> Enum.reduce([], fn
+      {:ok, {:ok, %{range: range, errors: errors}}}, acc ->
+        success_numbers = Enum.to_list(range) -- Enum.map(errors, &block_error_to_number/1)
+        success_numbers ++ acc
+
+      _result, acc ->
+        acc
+    end)
+    |> numbers_to_ranges()
+    |> MissingRangesManipulator.clear_batch()
   end
 
   defp handle_null_rounds(errors) do

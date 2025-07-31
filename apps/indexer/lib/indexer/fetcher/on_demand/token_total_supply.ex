@@ -9,17 +9,20 @@ defmodule Indexer.Fetcher.OnDemand.TokenTotalSupply do
   alias Explorer.Chain.Cache.BlockNumber
   alias Explorer.Chain.Events.Publisher
   alias Explorer.Chain.{Hash, Token}
-  alias Explorer.Helper, as: ExplorerHelper
   alias Explorer.Repo
   alias Explorer.Token.MetadataRetriever
+  alias Explorer.Utility.RateLimiter
 
   @ttl_in_blocks 1
 
   ## Interface
 
-  @spec trigger_fetch(Hash.Address.t()) :: :ok
-  def trigger_fetch(address_hash) do
-    GenServer.cast(__MODULE__, {:fetch_and_update, address_hash})
+  @spec trigger_fetch(String.t() | nil, Hash.Address.t()) :: :ok
+  def trigger_fetch(caller \\ nil, address_hash) do
+    case RateLimiter.check_rate(caller, :on_demand) do
+      :allow -> GenServer.cast(__MODULE__, {:fetch_and_update, address_hash})
+      :deny -> :ok
+    end
   end
 
   ## Callbacks
@@ -43,11 +46,11 @@ defmodule Indexer.Fetcher.OnDemand.TokenTotalSupply do
   ## Implementation
 
   defp do_fetch(address_hash) when not is_nil(address_hash) do
-    token = Repo.get_by(Token, contract_address_hash: address_hash)
+    token = Repo.replica().get_by(Token, contract_address_hash: address_hash)
 
     if (token && !token.skip_metadata && is_nil(token.total_supply_updated_at_block)) or
          BlockNumber.get_max() - token.total_supply_updated_at_block > @ttl_in_blocks do
-      token_address_hash_string = ExplorerHelper.add_0x_prefix(address_hash)
+      token_address_hash_string = to_string(address_hash)
 
       token_params = MetadataRetriever.get_total_supply_of(token_address_hash_string)
 
